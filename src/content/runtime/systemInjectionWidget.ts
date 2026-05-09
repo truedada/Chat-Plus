@@ -556,6 +556,13 @@ export function createSystemInjectionWidgetController({
     autoContinueToggle.style.transition =
       "background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease";
     autoContinueToggle.onclick = () => {
+      if (
+        state.scheduledSend.config?.enabled === true &&
+        String(state.scheduledSend.config?.content || "").trim()
+      ) {
+        setCodeModeAutoContinueEnabled(true, true);
+        return;
+      }
       setCodeModeAutoContinueEnabled(!state.codeMode.autoContinueEnabled, true);
     };
 
@@ -1139,6 +1146,10 @@ export function createSystemInjectionWidgetController({
     const isCollapsed = state.systemInjectionWidget.collapsed;
     const hasInstructionContent = Boolean(String(state.systemInstructionContent || "").trim());
     const autoContinueEnabled = state.codeMode.autoContinueEnabled;
+    const autoContinueLockedByScheduledSend = Boolean(
+      state.scheduledSend.config?.enabled &&
+        String(state.scheduledSend.config?.content || "").trim(),
+    );
     const autoContinueDelaySeconds = Math.max(
       0,
       Number(state.codeMode.autoContinueDelaySeconds || 0),
@@ -1223,7 +1234,11 @@ export function createSystemInjectionWidgetController({
       autoContinueLabel.style.color = isLight ? "#2e2924" : "#ece7e1";
     }
     if (autoContinueHint) {
-      autoContinueHint.textContent = autoContinueEnabled ? "自动" : "手动";
+      autoContinueHint.textContent = autoContinueLockedByScheduledSend
+        ? "定时锁定"
+        : autoContinueEnabled
+          ? "自动"
+          : "手动";
       autoContinueHint.style.color = autoContinueEnabled
         ? isLight
           ? "#8c5a1c"
@@ -1239,8 +1254,18 @@ export function createSystemInjectionWidgetController({
           ? "rgba(92, 107, 115, 0.08)"
           : "rgba(180, 170, 158, 0.12)";
     }
-    autoContinueToggle.title = autoContinueEnabled ? "已开启自动发送" : "已关闭自动发送";
-    applySwitchStyle(autoContinueToggle, autoContinueThumb, autoContinueEnabled, isLight);
+    autoContinueToggle.title = autoContinueLockedByScheduledSend
+      ? "定时发送开启期间会保持自动续发"
+      : autoContinueEnabled
+        ? "已开启自动发送"
+        : "已关闭自动发送";
+    applySwitchStyle(
+      autoContinueToggle,
+      autoContinueThumb,
+      autoContinueEnabled,
+      isLight,
+      autoContinueLockedByScheduledSend,
+    );
 
     if (autoContinueDelayRow) {
       autoContinueDelayRow.style.background = "transparent";

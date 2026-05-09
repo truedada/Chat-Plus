@@ -1,3 +1,11 @@
+// Usage:
+//   node scripts/set-version.mjs <version>
+//
+// Example:
+//   node scripts/set-version.mjs 1.2.3
+//
+// This updates the whole project's version by writing version.json and then
+// running scripts/sync-version.mjs to sync that version into the other files.
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

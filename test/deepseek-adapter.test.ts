@@ -223,6 +223,7 @@ test("deepseek continueConversation returns an enter-based textarea plan", () =>
   assert.deepEqual(Array.from(result?.input?.selectors || []), [
     'textarea[name="search"]',
     'textarea[placeholder="给 DeepSeek 发送消息 "]',
+    'textarea[placeholder^="给 DeepSeek 发送消息"]',
   ]);
 });
 
@@ -259,8 +260,18 @@ test("deepseek continueConversation uses the DeepSeek send button when available
   assert.deepEqual(Array.from(result?.input?.selectors || []), [
     'textarea[name="search"]',
     'textarea[placeholder="给 DeepSeek 发送消息 "]',
+    'textarea[placeholder^="给 DeepSeek 发送消息"]',
   ]);
-  assert.ok(Array.from(result?.send?.selectors || []).some((selector) => String(selector).includes("ds-floating-button")));
+  assert.ok(
+    Array.from(result?.send?.selectors || []).some((selector) =>
+      String(selector).includes('div[style*="width: fit-content"] > .ds-icon-button'),
+    ),
+  );
+  assert.ok(
+    Array.from(result?.send?.selectors || []).some((selector) =>
+      String(selector).includes(".bf38813a > div:nth-child(3)"),
+    ),
+  );
 });
 
 test("deepseek decorateBubbles targets top-level turns so thinking blocks stay inside one assistant node", () => {

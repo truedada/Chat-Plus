@@ -45,6 +45,11 @@ export function createSystemInjectionTrackingController({
     return value !== false;
   }
 
+  function isScheduledSendForcingAutoContinue() {
+    const config = state.scheduledSend.config;
+    return Boolean(config?.enabled && normalizeTrackedText(config.content));
+  }
+
   function persistCodeModeAutoContinueDelaySeconds(seconds: number) {
     chrome.storage.sync.set({
       [CODE_MODE_AUTO_CONTINUE_DELAY_STORAGE_KEY]: normalizeCodeModeAutoContinueDelaySeconds(seconds),
@@ -58,7 +63,9 @@ export function createSystemInjectionTrackingController({
   }
 
   function setCodeModeAutoContinueEnabled(value: unknown, persist = false) {
-    state.codeMode.autoContinueEnabled = normalizeCodeModeAutoContinueEnabled(value);
+    state.codeMode.autoContinueEnabled = isScheduledSendForcingAutoContinue()
+      ? true
+      : normalizeCodeModeAutoContinueEnabled(value);
     renderSystemInjectionWidget();
     if (persist) {
       persistCodeModeAutoContinueEnabled(state.codeMode.autoContinueEnabled);
@@ -196,6 +203,10 @@ export function createSystemInjectionTrackingController({
         state.codeMode.autoContinueEnabled = normalizeCodeModeAutoContinueEnabled(
           cfg[CODE_MODE_AUTO_CONTINUE_STORAGE_KEY],
         );
+        if (isScheduledSendForcingAutoContinue()) {
+          state.codeMode.autoContinueEnabled = true;
+          persistCodeModeAutoContinueEnabled(true);
+        }
         state.codeMode.autoContinueDelaySeconds = normalizeCodeModeAutoContinueDelaySeconds(
           cfg[CODE_MODE_AUTO_CONTINUE_DELAY_STORAGE_KEY],
         );

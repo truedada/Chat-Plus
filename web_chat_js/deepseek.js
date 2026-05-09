@@ -432,12 +432,16 @@ return {
     const inputSelectors = [
       'textarea[name="search"]',
       'textarea[placeholder="给 DeepSeek 发送消息 "]',
+      'textarea[placeholder^="给 DeepSeek 发送消息"]',
     ];
     const sendButtonSelectors = [
-      '.ds-icon-button[role="button"][aria-disabled="false"]:has(path[d^="M8.3125"])',
-      '[role="button"][aria-disabled="false"]:has(svg[viewBox="0 0 16 16"] path[d^="M8.3125"])',
-      '.ds-icon-button[role="button"][aria-disabled="false"]',
-      '.ds-icon-button[role="button"]:not([aria-disabled="true"])',
+      'div[style*="width: fit-content"] > .ds-icon-button[role="button"][aria-disabled="false"]:has(> .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      '.bf38813a > div:nth-child(3) > .ds-icon-button[role="button"][aria-disabled="false"]:has(> .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      '.ec4f5d61 > .bf38813a > div:nth-child(3) > .ds-icon-button[role="button"][aria-disabled="false"]:has(> .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      '.ds-icon-button.ds-icon-button--sizing-container[role="button"][aria-disabled="false"]:has(> .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      '.ds-icon-button[role="button"][aria-disabled="false"]:has(> .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      'div[style*="width: fit-content"]:has(> .ds-icon-button[role="button"][aria-disabled="false"] > .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
+      '.bf38813a > div:nth-child(3):has(> .ds-icon-button[role="button"][aria-disabled="false"] > .ds-icon > svg[viewBox="0 0 16 16"] > path[d^="M8.3125"])',
       'button.ds-floating-button.ds-floating-button--icon.ds-floating-button--lg[role="button"]',
       '[role="button"][aria-label="发送"]',
       '[role="button"][aria-label="Send"]',

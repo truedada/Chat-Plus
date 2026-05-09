@@ -198,7 +198,7 @@ export default function App() {
                 className="cp-icon-btn"
                 type="button"
                 aria-label="展开完整备份与恢复操作"
-                title="完整备份与恢复"
+                title="整个插件的完整备份与恢复"
                 aria-haspopup="menu"
                 aria-expanded={backupMenuOpen}
                 onClick={() => setBackupMenuOpen((open) => !open)}

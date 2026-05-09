@@ -66,6 +66,18 @@ import {
   let systemInjectionWidgetController: ReturnType<typeof createSystemInjectionWidgetController>;
   const SCHEDULED_SEND_MIN_RETRY_DELAY_MS = 2_000;
   const SCHEDULED_SEND_MAX_RETRY_DELAY_MS = 15_000;
+  const SCHEDULED_SEND_RESPONSE_WAIT_TIMEOUT_MS = 30 * 60 * 1000;
+
+  type ScheduledSendResponseWaitResult = {
+    completed: boolean;
+    timedOut: boolean;
+    cancelled: boolean;
+  };
+
+  let scheduledSendResponseWaiter: {
+    timerId: number;
+    resolve: (result: ScheduledSendResponseWaitResult) => void;
+  } | null = null;
 
   function stringifyError(error: unknown) {
     if (error instanceof Error) {
@@ -271,8 +283,62 @@ import {
     state.scheduledSend.timerId = 0;
   }
 
+  function resolveScheduledSendResponseWaiter(result: ScheduledSendResponseWaitResult) {
+    if (!scheduledSendResponseWaiter) return;
+    const waiter = scheduledSendResponseWaiter;
+    scheduledSendResponseWaiter = null;
+    window.clearTimeout(waiter.timerId);
+    waiter.resolve(result);
+  }
+
+  function waitForScheduledSendAssistantResponse() {
+    resolveScheduledSendResponseWaiter({
+      completed: false,
+      timedOut: false,
+      cancelled: true,
+    });
+
+    return new Promise<ScheduledSendResponseWaitResult>((resolve) => {
+      const timerId = window.setTimeout(() => {
+        if (!scheduledSendResponseWaiter) return;
+        const waiter = scheduledSendResponseWaiter;
+        scheduledSendResponseWaiter = null;
+        waiter.resolve({
+          completed: false,
+          timedOut: true,
+          cancelled: false,
+        });
+      }, SCHEDULED_SEND_RESPONSE_WAIT_TIMEOUT_MS);
+
+      scheduledSendResponseWaiter = {
+        timerId,
+        resolve,
+      };
+    });
+  }
+
+  function maybeCompleteScheduledSendResponseWait(detail: Record<string, unknown>) {
+    if (!scheduledSendResponseWaiter) return;
+    if (!state.scheduledSend.running) return;
+    if (detail.matched !== true || detail.responseFinal !== true) return;
+    if (state.pageContext.expectedAssistantTurn !== true) return;
+    if (state.pageContext.expectedAssistantTurnSource !== "auto") return;
+    if (hasAssistantContinuationProtocolBlock(detail)) return;
+
+    resolveScheduledSendResponseWaiter({
+      completed: true,
+      timedOut: false,
+      cancelled: false,
+    });
+  }
+
   function resetScheduledSendRuntimeState(options?: { keepConfig?: boolean }) {
     clearScheduledSendTimer();
+    resolveScheduledSendResponseWaiter({
+      completed: false,
+      timedOut: false,
+      cancelled: true,
+    });
     state.scheduledSend.running = false;
     state.scheduledSend.lastError = "";
     state.scheduledSend.lastRunAt = 0;
@@ -282,6 +348,11 @@ import {
       state.scheduledSend.config = null;
     }
     renderSystemInjectionWidget();
+  }
+
+  function forceAutoContinueForScheduledSend() {
+    if (!isScheduledSendConfigEnabled(state.scheduledSend.config)) return;
+    systemInjectionTrackingController.setCodeModeAutoContinueEnabled(true, true);
   }
 
   function buildDailyTime(date: Date, minutesOfDay: number) {
@@ -402,20 +473,33 @@ import {
 
     state.scheduledSend.running = true;
     state.scheduledSend.lastError = "";
+    forceAutoContinueForScheduledSend();
     // Scheduled send reuses the low-level send path only.
-    // It must never mutate the user's tool-result auto-continue preference.
-    const previousAutoContinueEnabled = state.codeMode.autoContinueEnabled;
+    // Keep tool-result continuation on while the scheduled flow is active.
     const previousAutoContinueDelaySeconds = state.codeMode.autoContinueDelaySeconds;
     renderSystemInjectionWidget();
     try {
+      const responseWaitPromise = waitForScheduledSendAssistantResponse();
       const result = await continuationController.sendStandalonePrompt(config.content, {
         allowFillFallback: false,
       });
       if (result.ok) {
+        const responseWaitResult = await responseWaitPromise;
+        if (responseWaitResult.cancelled) {
+          return;
+        }
+        if (responseWaitResult.timedOut) {
+          state.scheduledSend.lastError = "已发送，但未检测到 AI 最终响应，已按超时继续下一轮";
+        }
         state.scheduledSend.lastRunAt = Date.now();
         renderSystemInjectionWidget();
         scheduleNextScheduledSend(intervalMs);
       } else {
+        resolveScheduledSendResponseWaiter({
+          completed: false,
+          timedOut: false,
+          cancelled: true,
+        });
         state.scheduledSend.lastError = String(result.error || "定时发送失败");
         renderSystemInjectionWidget();
         scheduleNextScheduledSend(
@@ -429,6 +513,11 @@ import {
         );
       }
     } catch (error) {
+      resolveScheduledSendResponseWaiter({
+        completed: false,
+        timedOut: false,
+        cancelled: true,
+      });
       state.scheduledSend.lastError = stringifyError(error);
       renderSystemInjectionWidget();
       scheduleNextScheduledSend(
@@ -441,9 +530,7 @@ import {
         ),
       );
     } finally {
-      if (state.codeMode.autoContinueEnabled !== previousAutoContinueEnabled) {
-        state.codeMode.autoContinueEnabled = previousAutoContinueEnabled;
-      }
+      forceAutoContinueForScheduledSend();
       if (state.codeMode.autoContinueDelaySeconds !== previousAutoContinueDelaySeconds) {
         state.codeMode.autoContinueDelaySeconds = previousAutoContinueDelaySeconds;
       }
@@ -474,6 +561,7 @@ import {
     } else if (!state.scheduledSend.enabledAt) {
       state.scheduledSend.enabledAt = Date.now();
     }
+    forceAutoContinueForScheduledSend();
     scheduleNextScheduledSend(400);
   }
 
@@ -498,6 +586,9 @@ import {
         };
       }
       await resolveMonitorConfigFromRuntime();
+      if (enabled) {
+        forceAutoContinueForScheduledSend();
+      }
       return { ok: true as const };
     } catch (error) {
       return {
@@ -754,6 +845,30 @@ import {
     }
 
     return fallback;
+  }
+
+  function readMonitorResponseText(detail: Record<string, unknown>) {
+    return (
+      String(detail?.responseContentPreview || "").trim() ||
+      String(detail?.responsePreview || detail?.previewText || "").trim()
+    );
+  }
+
+  function hasAssistantContinuationProtocolBlock(detail: Record<string, unknown>) {
+    const responseText = readMonitorResponseText(detail);
+    if (!responseText) return false;
+
+    if (extractCodeModeBlock(responseText)) {
+      return true;
+    }
+
+    return Boolean(
+      extractWrappedChatPlusBlock(
+        responseText,
+        state.protocol?.toolCall?.begin || "",
+        state.protocol?.toolCall?.end || "",
+      ),
+    );
   }
 
   function hasWrappedSystemInjection(text: unknown) {
@@ -1195,6 +1310,7 @@ import {
         rememberBubbleDecorationResponsePreview(detail?.responseContentPreview);
       }
       const allowAssistantCodeModeAutoExecution = shouldAutoExecuteAssistantCodeMode(state, detail);
+      maybeCompleteScheduledSendResponseWait(detail);
       maybeConfirmPendingSystemInjectionFromResult(detail);
       maybeConfirmPendingManualDomInjectionFromResult(detail);
       if (
@@ -1390,11 +1506,10 @@ import {
         renderCodeModeStatusBar();
       }
       if (changes[CODE_MODE_AUTO_CONTINUE_STORAGE_KEY]) {
-        state.codeMode.autoContinueEnabled =
-          systemInjectionTrackingController.normalizeCodeModeAutoContinueEnabled(
-            changes[CODE_MODE_AUTO_CONTINUE_STORAGE_KEY].newValue,
-          );
-        renderSystemInjectionWidget();
+        systemInjectionTrackingController.setCodeModeAutoContinueEnabled(
+          changes[CODE_MODE_AUTO_CONTINUE_STORAGE_KEY].newValue,
+          isScheduledSendConfigEnabled(state.scheduledSend.config),
+        );
       }
       if (changes[CODE_MODE_AUTO_CONTINUE_DELAY_STORAGE_KEY]) {
         systemInjectionTrackingController.setCodeModeAutoContinueDelaySeconds(

@@ -82,13 +82,13 @@ export function LibraryScreen({
             </>
           </ToolbarIconButton>
           <ToolbarIconButton
-            label="全部导入"
+            label="导入"
             className="cp-toolbar-icon-sm cp-library-action-btn"
             onClick={onImportClick}
           >
             <>
               <ImportIcon />
-              <span className="cp-library-action-text">全部导入</span>
+              <span className="cp-library-action-text">导入</span>
             </>
           </ToolbarIconButton>
         </div>

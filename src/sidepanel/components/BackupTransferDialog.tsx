@@ -49,7 +49,7 @@ export function BackupTransferDialog({
           <div className="cp-backup-dialog-title-wrap">
             <div className="cp-backup-dialog-kicker">配置迁移</div>
             <div className="cp-backup-dialog-title" id="cp-backup-dialog-title">
-              完整备份与恢复
+              整个插件的完整备份与恢复
             </div>
             <div className="cp-backup-dialog-desc">
               导出当前浏览器里 Chat Plus 的持久化配置，或在另一浏览器一键恢复。
